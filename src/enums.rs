@@ -1,19 +1,27 @@
 use crate::{BasicDataFormatDescriptorHeader, ChannelTypeQualifiers, DataFormatFlags, SampleInformation};
-use core::{fmt, num::NonZeroU32};
+use core::{
+    fmt,
+    num::{NonZeroU32, NonZeroU8},
+};
 
 macro_rules! pseudo_enum {
-    ($(#[$attr:meta])* $name:ident { $($case:ident = $value:literal,)* }) => {
+    ($(#[$attr:meta])* $container:ident($prim:ident) $name:ident { $($case:ident = $value:literal,)* }) => {
         $(#[$attr])*
         #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-        pub struct $name(pub NonZeroU32);
+        pub struct $name($container);
+
         #[allow(non_upper_case_globals)]
         impl $name {
-            pub fn new(x: u32) -> Option<Self> {
-                Some(Self(NonZeroU32::new(x)?))
+            pub fn new(x: $prim) -> Option<Self> {
+                Some(Self($container::new(x)?))
+            }
+
+            pub fn value(&self) -> $prim {
+                self.0.get()
             }
 
             $(
-                pub const $case: Self = Self(unsafe { NonZeroU32::new_unchecked($value) });
+                pub const $case: Self = Self(unsafe { $container::new_unchecked($value) });
             )*
         }
 
@@ -34,7 +42,7 @@ macro_rules! pseudo_enum {
 
 pseudo_enum! {
     /// Known texture formats
-    Format {
+    NonZeroU32(u32) Format {
         R4G4_UNORM_PACK8 = 1,
         R4G4B4A4_UNORM_PACK16 = 2,
         B4G4R4A4_UNORM_PACK16 = 3,
@@ -193,7 +201,7 @@ pseudo_enum! {
 
 pseudo_enum! {
     /// Known supercompression schemes
-    SupercompressionScheme {
+    NonZeroU32(u32) SupercompressionScheme {
         BasisLZ = 1,
         Zstandard = 2,
         ZLIB = 3,
@@ -201,7 +209,7 @@ pseudo_enum! {
 }
 
 pseudo_enum! {
-    ColorModel {
+    NonZeroU8(u8) ColorModel {
         RGBSDA = 1,
         YUVSDA = 2,
         YIQSDA = 3,
@@ -235,7 +243,7 @@ pseudo_enum! {
 }
 
 pseudo_enum! {
-    ColorPrimaries {
+    NonZeroU8(u8) ColorPrimaries {
         BT709 = 1,
         BT601EBU = 2,
         BT601SMPTE = 3,
@@ -251,7 +259,7 @@ pseudo_enum! {
 }
 
 pseudo_enum! {
-    TransferFunction {
+    NonZeroU8(u8) TransferFunction {
         Linear = 1,
         SRGB = 2,
         ITU = 3,
@@ -273,9 +281,12 @@ pseudo_enum! {
     }
 }
 
+#[cfg(feature = "std")]
 pub struct ParsedBasicDataFormatDescriptor {
     pub header: BasicDataFormatDescriptorHeader,
-    pub sample_information: &'static [SampleInformation],
+    // This unfortunately cannot be a const slice because the functions needed to
+    // construct a SampleInformation are not const.
+    pub sample_information: std::vec::Vec<SampleInformation>,
 }
 
 impl Format {
@@ -439,5139 +450,5441 @@ impl Format {
     }
 
     pub fn basic_data_format_descriptor(self) -> Option<ParsedBasicDataFormatDescriptor> {
+        use std::vec;
+
         Some(match self {
-            Self::R4G4_UNORM_PACK8 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 4,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 15,
-                        },
-                        SampleInformation {
-                            bit_offset: 4,
-                            bit_length: 4,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 15,
-                        },
+            Self::R4G4_UNORM_PACK8 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
                     ],
-                };
-                DFD
-            }
-            Self::R4G4B4A4_UNORM_PACK16 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 4,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 15,
-                        },
-                        SampleInformation {
-                            bit_offset: 4,
-                            bit_length: 4,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 15,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 4,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 15,
-                        },
-                        SampleInformation {
-                            bit_offset: 12,
-                            bit_length: 4,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 15,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B4G4R4A4_UNORM_PACK16 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 4,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 15,
-                        },
-                        SampleInformation {
-                            bit_offset: 4,
-                            bit_length: 4,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 15,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 4,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 15,
-                        },
-                        SampleInformation {
-                            bit_offset: 12,
-                            bit_length: 4,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 15,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R5G6B5_UNORM_PACK16 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 5,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                        SampleInformation {
-                            bit_offset: 5,
-                            bit_length: 6,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 63,
-                        },
-                        SampleInformation {
-                            bit_offset: 11,
-                            bit_length: 5,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B5G6R5_UNORM_PACK16 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 5,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                        SampleInformation {
-                            bit_offset: 5,
-                            bit_length: 6,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 63,
-                        },
-                        SampleInformation {
-                            bit_offset: 11,
-                            bit_length: 5,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R5G5B5A1_UNORM_PACK16 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 1,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 1,
-                            bit_length: 5,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                        SampleInformation {
-                            bit_offset: 6,
-                            bit_length: 5,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                        SampleInformation {
-                            bit_offset: 11,
-                            bit_length: 5,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B5G5R5A1_UNORM_PACK16 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 1,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 1,
-                            bit_length: 5,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                        SampleInformation {
-                            bit_offset: 6,
-                            bit_length: 5,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                        SampleInformation {
-                            bit_offset: 11,
-                            bit_length: 5,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::A1R5G5B5_UNORM_PACK16 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 5,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                        SampleInformation {
-                            bit_offset: 5,
-                            bit_length: 5,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                        SampleInformation {
-                            bit_offset: 10,
-                            bit_length: 5,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 31,
-                        },
-                        SampleInformation {
-                            bit_offset: 15,
-                            bit_length: 1,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8_UNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
+                    bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 8,
+                        bit_length: NonZeroU8::new(4).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 15,
+                    },
+                    SampleInformation {
+                        bit_offset: 4,
+                        bit_length: NonZeroU8::new(4).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 15,
+                    },
+                ],
+            },
+            Self::R4G4B4A4_UNORM_PACK16 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(4).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 15,
+                    },
+                    SampleInformation {
+                        bit_offset: 4,
+                        bit_length: NonZeroU8::new(4).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 15,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(4).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 15,
+                    },
+                    SampleInformation {
+                        bit_offset: 12,
+                        bit_length: NonZeroU8::new(4).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 15,
+                    },
+                ],
+            },
+            Self::B4G4R4A4_UNORM_PACK16 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(4).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 15,
+                    },
+                    SampleInformation {
+                        bit_offset: 4,
+                        bit_length: NonZeroU8::new(4).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 15,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(4).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 15,
+                    },
+                    SampleInformation {
+                        bit_offset: 12,
+                        bit_length: NonZeroU8::new(4).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 15,
+                    },
+                ],
+            },
+            Self::R5G6B5_UNORM_PACK16 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                    SampleInformation {
+                        bit_offset: 5,
+                        bit_length: NonZeroU8::new(6).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 63,
+                    },
+                    SampleInformation {
+                        bit_offset: 11,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                ],
+            },
+            Self::B5G6R5_UNORM_PACK16 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                    SampleInformation {
+                        bit_offset: 5,
+                        bit_length: NonZeroU8::new(6).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 63,
+                    },
+                    SampleInformation {
+                        bit_offset: 11,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                ],
+            },
+            Self::R5G5B5A1_UNORM_PACK16 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(1).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 1,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                    SampleInformation {
+                        bit_offset: 6,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                    SampleInformation {
+                        bit_offset: 11,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                ],
+            },
+            Self::B5G5R5A1_UNORM_PACK16 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(1).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 1,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                    SampleInformation {
+                        bit_offset: 6,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                    SampleInformation {
+                        bit_offset: 11,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                ],
+            },
+            Self::A1R5G5B5_UNORM_PACK16 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                    SampleInformation {
+                        bit_offset: 5,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                    SampleInformation {
+                        bit_offset: 10,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 31,
+                    },
+                    SampleInformation {
+                        bit_offset: 15,
+                        bit_length: NonZeroU8::new(1).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R8_UNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(8).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 255,
+                }],
+            },
+            Self::R8_SNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(8).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 4294967169,
+                    upper: 127,
+                }],
+            },
+            Self::R8_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(8).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 1,
+                }],
+            },
+            Self::R8_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(8).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 4294967295,
+                    upper: 1,
+                }],
+            },
+            Self::R8_SRGB => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(8).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 255,
+                }],
+            },
+            Self::R8G8_UNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 255,
-                    }],
-                };
-                DFD
-            }
-            Self::R8_SNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                ],
+            },
+            Self::R8G8_SNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
                         sample_positions: [0, 0, 0, 0],
                         lower: 4294967169,
                         upper: 127,
-                    }],
-                };
-                DFD
-            }
-            Self::R8_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                ],
+            },
+            Self::R8G8_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 1,
-                    }],
-                };
-                DFD
-            }
-            Self::R8_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R8G8_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
                         sample_positions: [0, 0, 0, 0],
                         lower: 4294967295,
                         upper: 1,
-                    }],
-                };
-                DFD
-            }
-            Self::R8_SRGB => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R8G8_SRGB => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 255,
-                    }],
-                };
-                DFD
-            }
-            Self::R8G8_UNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                ],
+            },
+            Self::R8G8B8_UNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
                     ],
-                };
-                DFD
-            }
-            Self::R8G8_SNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8_SRGB => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8B8_UNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8B8_SNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8B8_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8B8_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8B8_SRGB => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B8G8R8_UNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B8G8R8_SNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B8G8R8_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B8G8R8_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B8G8R8_SRGB => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8B8A8_UNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 24,
-                            bit_length: 8,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8B8A8_SNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                        SampleInformation {
-                            bit_offset: 24,
-                            bit_length: 8,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8B8A8_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 24,
-                            bit_length: 8,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8B8A8_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 24,
-                            bit_length: 8,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R8G8B8A8_SRGB => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 24,
-                            bit_length: 8,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B8G8R8A8_UNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 24,
-                            bit_length: 8,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B8G8R8A8_SNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                        SampleInformation {
-                            bit_offset: 24,
-                            bit_length: 8,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967169,
-                            upper: 127,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B8G8R8A8_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 24,
-                            bit_length: 8,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B8G8R8A8_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 24,
-                            bit_length: 8,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B8G8R8A8_SRGB => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 8,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 8,
-                            bit_length: 8,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 8,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                        SampleInformation {
-                            bit_offset: 24,
-                            bit_length: 8,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 255,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::A2R10G10B10_UNORM_PACK32 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 10,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1023,
-                        },
-                        SampleInformation {
-                            bit_offset: 10,
-                            bit_length: 10,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1023,
-                        },
-                        SampleInformation {
-                            bit_offset: 20,
-                            bit_length: 10,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1023,
-                        },
-                        SampleInformation {
-                            bit_offset: 30,
-                            bit_length: 2,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 3,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::A2R10G10B10_SNORM_PACK32 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 10,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294966785,
-                            upper: 511,
-                        },
-                        SampleInformation {
-                            bit_offset: 10,
-                            bit_length: 10,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294966785,
-                            upper: 511,
-                        },
-                        SampleInformation {
-                            bit_offset: 20,
-                            bit_length: 10,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294966785,
-                            upper: 511,
-                        },
-                        SampleInformation {
-                            bit_offset: 30,
-                            bit_length: 2,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::A2R10G10B10_UINT_PACK32 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 10,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 10,
-                            bit_length: 10,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 20,
-                            bit_length: 10,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 30,
-                            bit_length: 2,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::A2R10G10B10_SINT_PACK32 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 10,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 10,
-                            bit_length: 10,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 20,
-                            bit_length: 10,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 30,
-                            bit_length: 2,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::A2B10G10R10_UNORM_PACK32 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 10,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1023,
-                        },
-                        SampleInformation {
-                            bit_offset: 10,
-                            bit_length: 10,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1023,
-                        },
-                        SampleInformation {
-                            bit_offset: 20,
-                            bit_length: 10,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1023,
-                        },
-                        SampleInformation {
-                            bit_offset: 30,
-                            bit_length: 2,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 3,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::A2B10G10R10_SNORM_PACK32 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 10,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294966785,
-                            upper: 511,
-                        },
-                        SampleInformation {
-                            bit_offset: 10,
-                            bit_length: 10,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294966785,
-                            upper: 511,
-                        },
-                        SampleInformation {
-                            bit_offset: 20,
-                            bit_length: 10,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294966785,
-                            upper: 511,
-                        },
-                        SampleInformation {
-                            bit_offset: 30,
-                            bit_length: 2,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::A2B10G10R10_UINT_PACK32 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 10,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 10,
-                            bit_length: 10,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 20,
-                            bit_length: 10,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 30,
-                            bit_length: 2,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::A2B10G10R10_SINT_PACK32 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 10,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 10,
-                            bit_length: 10,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 20,
-                            bit_length: 10,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 30,
-                            bit_length: 2,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16_UNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
+                    bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                ],
+            },
+            Self::R8G8B8_SNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                ],
+            },
+            Self::R8G8B8_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R8G8B8_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R8G8B8_SRGB => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                ],
+            },
+            Self::B8G8R8_UNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                ],
+            },
+            Self::B8G8R8_SNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                ],
+            },
+            Self::B8G8R8_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::B8G8R8_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::B8G8R8_SRGB => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [3, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                ],
+            },
+            Self::R8G8B8A8_UNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 24,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                ],
+            },
+            Self::R8G8B8A8_SNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                    SampleInformation {
+                        bit_offset: 24,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                ],
+            },
+            Self::R8G8B8A8_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 24,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R8G8B8A8_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 24,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R8G8B8A8_SRGB => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 24,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                ],
+            },
+            Self::B8G8R8A8_UNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 24,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                ],
+            },
+            Self::B8G8R8A8_SNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                    SampleInformation {
+                        bit_offset: 24,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967169,
+                        upper: 127,
+                    },
+                ],
+            },
+            Self::B8G8R8A8_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 24,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::B8G8R8A8_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 24,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::B8G8R8A8_SRGB => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 8,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                    SampleInformation {
+                        bit_offset: 24,
+                        bit_length: NonZeroU8::new(8).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 255,
+                    },
+                ],
+            },
+            Self::A2R10G10B10_UNORM_PACK32 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1023,
+                    },
+                    SampleInformation {
+                        bit_offset: 10,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1023,
+                    },
+                    SampleInformation {
+                        bit_offset: 20,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1023,
+                    },
+                    SampleInformation {
+                        bit_offset: 30,
+                        bit_length: NonZeroU8::new(2).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 3,
+                    },
+                ],
+            },
+            Self::A2R10G10B10_SNORM_PACK32 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294966785,
+                        upper: 511,
+                    },
+                    SampleInformation {
+                        bit_offset: 10,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294966785,
+                        upper: 511,
+                    },
+                    SampleInformation {
+                        bit_offset: 20,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294966785,
+                        upper: 511,
+                    },
+                    SampleInformation {
+                        bit_offset: 30,
+                        bit_length: NonZeroU8::new(2).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::A2R10G10B10_UINT_PACK32 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 10,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 20,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 30,
+                        bit_length: NonZeroU8::new(2).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::A2R10G10B10_SINT_PACK32 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 10,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 20,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 30,
+                        bit_length: NonZeroU8::new(2).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::A2B10G10R10_UNORM_PACK32 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1023,
+                    },
+                    SampleInformation {
+                        bit_offset: 10,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1023,
+                    },
+                    SampleInformation {
+                        bit_offset: 20,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1023,
+                    },
+                    SampleInformation {
+                        bit_offset: 30,
+                        bit_length: NonZeroU8::new(2).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 3,
+                    },
+                ],
+            },
+            Self::A2B10G10R10_SNORM_PACK32 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294966785,
+                        upper: 511,
+                    },
+                    SampleInformation {
+                        bit_offset: 10,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294966785,
+                        upper: 511,
+                    },
+                    SampleInformation {
+                        bit_offset: 20,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294966785,
+                        upper: 511,
+                    },
+                    SampleInformation {
+                        bit_offset: 30,
+                        bit_length: NonZeroU8::new(2).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::A2B10G10R10_UINT_PACK32 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 10,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 20,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 30,
+                        bit_length: NonZeroU8::new(2).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::A2B10G10R10_SINT_PACK32 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 10,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 20,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 30,
+                        bit_length: NonZeroU8::new(2).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R16_UNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(16).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 65535,
+                }],
+            },
+            Self::R16_SNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(16).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 4294934529,
+                    upper: 32767,
+                }],
+            },
+            Self::R16_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(16).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 1,
+                }],
+            },
+            Self::R16_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(16).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 4294967295,
+                    upper: 1,
+                }],
+            },
+            Self::R16_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(16).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 3212836864,
+                    upper: 1065353216,
+                }],
+            },
+            Self::R16G16_UNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(16).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 65535,
-                    }],
-                };
-                DFD
-            }
-            Self::R16_SNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 65535,
+                    },
+                ],
+            },
+            Self::R16G16_SNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
                         sample_positions: [0, 0, 0, 0],
                         lower: 4294934529,
                         upper: 32767,
-                    }],
-                };
-                DFD
-            }
-            Self::R16_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294934529,
+                        upper: 32767,
+                    },
+                ],
+            },
+            Self::R16G16_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 1,
-                    }],
-                };
-                DFD
-            }
-            Self::R16_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 16,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 4294967295,
-                        upper: 1,
-                    }],
-                };
-                DFD
-            }
-            Self::R16_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 16,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 3212836864,
-                        upper: 1065353216,
-                    }],
-                };
-                DFD
-            }
-            Self::R16G16_UNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 65535,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 65535,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16_SNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294934529,
-                            upper: 32767,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294934529,
-                            upper: 32767,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16B16_UNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [6, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 65535,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 65535,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 16,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 65535,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16B16_SNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [6, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294934529,
-                            upper: 32767,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294934529,
-                            upper: 32767,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 16,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294934529,
-                            upper: 32767,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16B16_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [6, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 16,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16B16_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [6, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 16,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16B16_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [6, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 16,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16B16A16_UNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 65535,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 65535,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 16,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 65535,
-                        },
-                        SampleInformation {
-                            bit_offset: 48,
-                            bit_length: 16,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 65535,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16B16A16_SNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294934529,
-                            upper: 32767,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294934529,
-                            upper: 32767,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 16,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294934529,
-                            upper: 32767,
-                        },
-                        SampleInformation {
-                            bit_offset: 48,
-                            bit_length: 16,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294934529,
-                            upper: 32767,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16B16A16_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 16,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 48,
-                            bit_length: 16,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16B16A16_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 16,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 48,
-                            bit_length: 16,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R16G16B16A16_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 16,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 16,
-                            bit_length: 16,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 16,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 48,
-                            bit_length: 16,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R32_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 32,
-                        channel_type: 0,
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 1,
-                    }],
-                };
-                DFD
-            }
-            Self::R32_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
+                ],
+            },
+            Self::R16G16_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 32,
+                        bit_length: NonZeroU8::new(16).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
                         sample_positions: [0, 0, 0, 0],
                         lower: 4294967295,
                         upper: 1,
-                    }],
-                };
-                DFD
-            }
-            Self::R32_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 32,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 3212836864,
-                        upper: 1065353216,
-                    }],
-                };
-                DFD
-            }
-            Self::R32G32_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 32,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 32,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R32G32_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 32,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 32,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R32G32_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 32,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 32,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R32G32B32_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [12, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 32,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 32,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 32,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R32G32B32_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [12, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 32,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 32,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 32,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R32G32B32_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [12, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 32,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 32,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 32,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R32G32B32A32_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 32,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 32,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 32,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 96,
-                            bit_length: 32,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R32G32B32A32_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 32,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 32,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 32,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 96,
-                            bit_length: 32,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R32G32B32A32_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 32,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 32,
-                            bit_length: 32,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 32,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 96,
-                            bit_length: 32,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R64_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 64,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 1,
-                    }],
-                };
-                DFD
-            }
-            Self::R64_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 64,
-                        channel_type: 0,
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
                         channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
                         sample_positions: [0, 0, 0, 0],
                         lower: 4294967295,
                         upper: 1,
-                    }],
-                };
-                DFD
-            }
-            Self::R64_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
+                ],
+            },
+            Self::R16G16_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 64,
+                        bit_length: NonZeroU8::new(16).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
                         sample_positions: [0, 0, 0, 0],
                         lower: 3212836864,
                         upper: 1065353216,
-                    }],
-                };
-                DFD
-            }
-            Self::R64G64_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                ],
+            },
+            Self::R16G16B16_UNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
                     ],
-                };
-                DFD
-            }
-            Self::R64G64_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R64G64_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R64G64B64_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [24, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 128,
-                            bit_length: 64,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R64G64B64_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [24, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 128,
-                            bit_length: 64,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R64G64B64_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [24, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 128,
-                            bit_length: 64,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R64G64B64A64_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [32, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 128,
-                            bit_length: 64,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 192,
-                            bit_length: 64,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R64G64B64A64_SINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [32, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 128,
-                            bit_length: 64,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                        SampleInformation {
-                            bit_offset: 192,
-                            bit_length: 64,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 4294967295,
-                            upper: 1,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::R64G64B64A64_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [32, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 128,
-                            bit_length: 64,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 192,
-                            bit_length: 64,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 3212836864,
-                            upper: 1065353216,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::B10G11R11_UFLOAT_PACK32 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 11,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::FLOAT,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 11,
-                            bit_length: 11,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::FLOAT,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1065353216,
-                        },
-                        SampleInformation {
-                            bit_offset: 22,
-                            bit_length: 10,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::FLOAT,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 1065353216,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::E5B9G9R9_UFLOAT_PACK32 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 9,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 8448,
-                        },
-                        SampleInformation {
-                            bit_offset: 27,
-                            bit_length: 5,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::EXPONENT,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 15,
-                            upper: 31,
-                        },
-                        SampleInformation {
-                            bit_offset: 9,
-                            bit_length: 9,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 8448,
-                        },
-                        SampleInformation {
-                            bit_offset: 27,
-                            bit_length: 5,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::EXPONENT,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 15,
-                            upper: 31,
-                        },
-                        SampleInformation {
-                            bit_offset: 18,
-                            bit_length: 9,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 8448,
-                        },
-                        SampleInformation {
-                            bit_offset: 27,
-                            bit_length: 5,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::EXPONENT,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 15,
-                            upper: 31,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::D16_UNORM => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: None,
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
+                    bytes_planes: [6, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 16,
-                        channel_type: 14,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 65535,
-                    }],
-                };
-                DFD
-            }
-            Self::X8_D24_UNORM_PACK32 => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: None,
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 24,
-                        channel_type: 14,
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
-                        upper: 16777215,
-                    }],
-                };
-                DFD
-            }
-            Self::D32_SFLOAT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: None,
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                        upper: 65535,
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 32,
-                        channel_type: 14,
-                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
-                        lower: 3212836864,
-                        upper: 1065353216,
-                    }],
-                };
-                DFD
-            }
-            Self::S8_UINT => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::RGBSDA),
-                        color_primaries: None,
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [1, 1, 1, 1],
-                        bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
+                        lower: 0,
+                        upper: 65535,
                     },
-                    sample_information: &[SampleInformation {
+                ],
+            },
+            Self::R16G16B16_SNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [6, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 8,
-                        channel_type: 13,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294934529,
+                        upper: 32767,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294934529,
+                        upper: 32767,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294934529,
+                        upper: 32767,
+                    },
+                ],
+            },
+            Self::R16G16B16_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [6, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 1,
-                    }],
-                };
-                DFD
-            }
-            Self::BC1_RGB_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC1A),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 64,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::BC1_RGB_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC1A),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 64,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::BC1_RGBA_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC1A),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 64,
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
                         channel_type: 1,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::BC1_RGBA_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC1A),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                        upper: 1,
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 64,
-                        channel_type: 1,
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 2,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::BC2_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                        upper: 1,
                     },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
+                ],
+            },
+            Self::R16G16B16_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
                     ],
-                };
-                DFD
-            }
-            Self::BC2_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::BC3_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC3),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::BC3_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC3),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::BC4_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC4),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
+                    bytes_planes: [6, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 64,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::BC4_SNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC4),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 64,
+                        bit_length: NonZeroU8::new(16).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
                         sample_positions: [0, 0, 0, 0],
-                        lower: 2147483648,
-                        upper: 2147483647,
-                    }],
-                };
-                DFD
-            }
-            Self::BC5_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC5),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
                     },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R16G16B16_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
                     ],
-                };
-                DFD
-            }
-            Self::BC5_SNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC5),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 2147483648,
-                            upper: 2147483647,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 2147483648,
-                            upper: 2147483647,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::BC6H_UFLOAT_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC6H),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
+                    bytes_planes: [6, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 128,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                ],
+            },
+            Self::R16G16B16A16_UNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 65535,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 65535,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 65535,
+                    },
+                    SampleInformation {
+                        bit_offset: 48,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 65535,
+                    },
+                ],
+            },
+            Self::R16G16B16A16_SNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294934529,
+                        upper: 32767,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294934529,
+                        upper: 32767,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294934529,
+                        upper: 32767,
+                    },
+                    SampleInformation {
+                        bit_offset: 48,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294934529,
+                        upper: 32767,
+                    },
+                ],
+            },
+            Self::R16G16B16A16_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 48,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R16G16B16A16_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 48,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R16G16B16A16_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 16,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 48,
+                        bit_length: NonZeroU8::new(16).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                ],
+            },
+            Self::R32_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(32).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 1,
+                }],
+            },
+            Self::R32_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(32).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 4294967295,
+                    upper: 1,
+                }],
+            },
+            Self::R32_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(32).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 3212836864,
+                    upper: 1065353216,
+                }],
+            },
+            Self::R32G32_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R32G32_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R32G32_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                ],
+            },
+            Self::R32G32B32_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [12, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R32G32B32_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [12, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R32G32B32_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [12, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                ],
+            },
+            Self::R32G32B32A32_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 96,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R32G32B32A32_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 96,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R32G32B32A32_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 32,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 96,
+                        bit_length: NonZeroU8::new(32).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                ],
+            },
+            Self::R64_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 1,
+                }],
+            },
+            Self::R64_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 4294967295,
+                    upper: 1,
+                }],
+            },
+            Self::R64_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 3212836864,
+                    upper: 1065353216,
+                }],
+            },
+            Self::R64G64_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R64G64_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R64G64_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                ],
+            },
+            Self::R64G64B64_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [24, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 128,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R64G64B64_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [24, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 128,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R64G64B64_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [24, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 128,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                ],
+            },
+            Self::R64G64B64A64_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [32, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 128,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 192,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R64G64B64A64_SINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [32, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 128,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                    SampleInformation {
+                        bit_offset: 192,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 4294967295,
+                        upper: 1,
+                    },
+                ],
+            },
+            Self::R64G64B64A64_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [32, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 128,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                    SampleInformation {
+                        bit_offset: 192,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 3212836864,
+                        upper: 1065353216,
+                    },
+                ],
+            },
+            Self::B10G11R11_UFLOAT_PACK32 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(11).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::FLOAT,
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 1065353216,
-                    }],
-                };
-                DFD
-            }
-            Self::BC6H_SFLOAT_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC6H),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                    SampleInformation {
+                        bit_offset: 11,
+                        bit_length: NonZeroU8::new(11).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::FLOAT,
                         sample_positions: [0, 0, 0, 0],
-                        lower: 3212836864,
+                        lower: 0,
                         upper: 1065353216,
-                    }],
-                };
-                DFD
-            }
-            Self::BC7_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC7),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
+                    SampleInformation {
+                        bit_offset: 22,
+                        bit_length: NonZeroU8::new(10).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::FLOAT,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 1065353216,
+                    },
+                ],
+            },
+            Self::E5B9G9R9_UFLOAT_PACK32 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 128,
+                        bit_length: NonZeroU8::new(9).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::BC7_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::BC7),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                        upper: 8448,
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
+                    SampleInformation {
+                        bit_offset: 27,
+                        bit_length: NonZeroU8::new(5).unwrap(),
                         channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::EXPONENT,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 15,
+                        upper: 31,
+                    },
+                    SampleInformation {
+                        bit_offset: 9,
+                        bit_length: NonZeroU8::new(9).unwrap(),
+                        channel_type: 1,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ETC2_R8G8B8_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ETC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                        upper: 8448,
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 64,
+                    SampleInformation {
+                        bit_offset: 27,
+                        bit_length: NonZeroU8::new(5).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::EXPONENT,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 15,
+                        upper: 31,
+                    },
+                    SampleInformation {
+                        bit_offset: 18,
+                        bit_length: NonZeroU8::new(9).unwrap(),
                         channel_type: 2,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ETC2_R8G8B8_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ETC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                        upper: 8448,
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 64,
+                    SampleInformation {
+                        bit_offset: 27,
+                        bit_length: NonZeroU8::new(5).unwrap(),
                         channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::EXPONENT,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 15,
+                        upper: 31,
+                    },
+                ],
+            },
+            Self::D16_UNORM => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: None,
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [2, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(16).unwrap(),
+                    channel_type: 14,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 65535,
+                }],
+            },
+            Self::X8_D24_UNORM_PACK32 => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: None,
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(24).unwrap(),
+                    channel_type: 14,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 16777215,
+                }],
+            },
+            Self::D32_SFLOAT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: None,
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [4, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(32).unwrap(),
+                    channel_type: 14,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 3212836864,
+                    upper: 1065353216,
+                }],
+            },
+            Self::S8_UINT => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::RGBSDA),
+                    color_primaries: None,
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [1, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(8).unwrap(),
+                    channel_type: 13,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 1,
+                }],
+            },
+            Self::BC1_RGB_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC1A),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::BC1_RGB_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC1A),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::BC1_RGBA_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC1A),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 1,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::BC1_RGBA_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC1A),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 1,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::BC2_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 15,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ETC2_R8G8B8A1_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ETC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::ETC2_R8G8B8A1_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ETC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::ETC2_R8G8B8A8_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ETC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::ETC2_R8G8B8A8_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ETC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 15,
-                            channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 2,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                    ],
-                };
-                DFD
-            }
-            Self::EAC_R11_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ETC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 64,
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::EAC_R11_SNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ETC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
+                ],
+            },
+            Self::BC2_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                ],
+            },
+            Self::BC3_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC3),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                ],
+            },
+            Self::BC3_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC3),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                ],
+            },
+            Self::BC4_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC4),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::BC4_SNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC4),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 2147483648,
+                    upper: 2147483647,
+                }],
+            },
+            Self::BC5_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC5),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 0,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                ],
+            },
+            Self::BC5_SNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC5),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
                         sample_positions: [0, 0, 0, 0],
                         lower: 2147483648,
                         upper: 2147483647,
-                    }],
-                };
-                DFD
-            }
-            Self::EAC_R11G11_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ETC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 0,
-                            upper: 4294967295,
-                        },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 2147483648,
+                        upper: 2147483647,
+                    },
+                ],
+            },
+            Self::BC6H_UFLOAT_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC6H),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
                     ],
-                };
-                DFD
-            }
-            Self::EAC_R11G11_SNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ETC2),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[
-                        SampleInformation {
-                            bit_offset: 0,
-                            bit_length: 64,
-                            channel_type: 0,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 2147483648,
-                            upper: 2147483647,
-                        },
-                        SampleInformation {
-                            bit_offset: 64,
-                            bit_length: 64,
-                            channel_type: 1,
-                            channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
-                            sample_positions: [0, 0, 0, 0],
-                            lower: 2147483648,
-                            upper: 2147483647,
-                        },
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::FLOAT,
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 1065353216,
+                }],
+            },
+            Self::BC6H_SFLOAT_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC6H),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
                     ],
-                };
-                DFD
-            }
-            Self::ASTC_4x4_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED.union(ChannelTypeQualifiers::FLOAT),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 3212836864,
+                    upper: 1065353216,
+                }],
+            },
+            Self::BC7_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC7),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::BC7_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::BC7),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ETC2_R8G8B8_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ETC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 2,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ETC2_R8G8B8_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ETC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 2,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ETC2_R8G8B8A1_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ETC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 128,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                ],
+            },
+            Self::ETC2_R8G8B8A1_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ETC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                ],
+            },
+            Self::ETC2_R8G8B8A8_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ETC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                ],
+            },
+            Self::ETC2_R8G8B8A8_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ETC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 15,
+                        channel_type_qualifiers: ChannelTypeQualifiers::LINEAR,
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 2,
+                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        sample_positions: [0, 0, 0, 0],
+                        lower: 0,
+                        upper: 4294967295,
+                    },
+                ],
+            },
+            Self::EAC_R11_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ETC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::EAC_R11_SNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ETC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [8, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(64).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 2147483648,
+                    upper: 2147483647,
+                }],
+            },
+            Self::EAC_R11G11_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ETC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
+                        bit_offset: 0,
+                        bit_length: NonZeroU8::new(64).unwrap(),
                         channel_type: 0,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_4x4_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [4, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
                         channel_type_qualifiers: ChannelTypeQualifiers::empty(),
                         sample_positions: [0, 0, 0, 0],
                         lower: 0,
                         upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_5x4_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [5, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
                     },
-                    sample_information: &[SampleInformation {
+                ],
+            },
+            Self::EAC_R11G11_SNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ETC2),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![
+                    SampleInformation {
                         bit_offset: 0,
-                        bit_length: 128,
+                        bit_length: NonZeroU8::new(64).unwrap(),
                         channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
                         sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_5x4_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [5, 4, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                        lower: 2147483648,
+                        upper: 2147483647,
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    SampleInformation {
+                        bit_offset: 64,
+                        bit_length: NonZeroU8::new(64).unwrap(),
+                        channel_type: 1,
+                        channel_type_qualifiers: ChannelTypeQualifiers::SIGNED,
                         sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_5x5_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [5, 5, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                        lower: 2147483648,
+                        upper: 2147483647,
                     },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_5x5_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [5, 5, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_6x5_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [6, 5, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_6x5_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [6, 5, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_6x6_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [6, 6, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_6x6_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [6, 6, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_8x5_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [8, 5, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_8x5_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [8, 5, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_8x6_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [8, 6, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_8x6_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [8, 6, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_8x8_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [8, 8, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_8x8_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [8, 8, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_10x5_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [10, 5, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_10x5_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [10, 5, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_10x6_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [10, 6, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_10x6_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [10, 6, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_10x8_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [10, 8, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_10x8_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [10, 8, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_10x10_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [10, 10, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_10x10_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [10, 10, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_12x10_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [12, 10, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_12x10_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [12, 10, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_12x12_UNORM_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::Linear),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [12, 12, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
-            Self::ASTC_12x12_SRGB_BLOCK => {
-                const DFD: ParsedBasicDataFormatDescriptor = ParsedBasicDataFormatDescriptor {
-                    header: BasicDataFormatDescriptorHeader {
-                        color_model: Some(ColorModel::ASTC),
-                        color_primaries: Some(ColorPrimaries::BT709),
-                        transfer_function: Some(TransferFunction::SRGB),
-                        flags: DataFormatFlags::STRAIGHT_ALPHA,
-                        texel_block_dimensions: [12, 12, 1, 1],
-                        bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
-                    },
-                    sample_information: &[SampleInformation {
-                        bit_offset: 0,
-                        bit_length: 128,
-                        channel_type: 0,
-                        channel_type_qualifiers: ChannelTypeQualifiers::empty(),
-                        sample_positions: [0, 0, 0, 0],
-                        lower: 0,
-                        upper: 4294967295,
-                    }],
-                };
-                DFD
-            }
+                ],
+            },
+            Self::ASTC_4x4_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_4x4_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_5x4_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_5x4_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(4).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_5x5_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_5x5_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_6x5_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(6).unwrap(),
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_6x5_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(6).unwrap(),
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_6x6_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(6).unwrap(),
+                        NonZeroU8::new(6).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_6x6_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(6).unwrap(),
+                        NonZeroU8::new(6).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_8x5_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(8).unwrap(),
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_8x5_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(8).unwrap(),
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_8x6_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(8).unwrap(),
+                        NonZeroU8::new(6).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_8x6_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(8).unwrap(),
+                        NonZeroU8::new(6).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_8x8_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(8).unwrap(),
+                        NonZeroU8::new(8).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_8x8_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(8).unwrap(),
+                        NonZeroU8::new(8).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_10x5_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_10x5_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(5).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_10x6_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(6).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_10x6_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(6).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_10x8_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(8).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_10x8_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(8).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_10x10_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_10x10_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_12x10_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(12).unwrap(),
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_12x10_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(12).unwrap(),
+                        NonZeroU8::new(10).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_12x12_UNORM_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::Linear),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(12).unwrap(),
+                        NonZeroU8::new(12).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
+            Self::ASTC_12x12_SRGB_BLOCK => ParsedBasicDataFormatDescriptor {
+                header: BasicDataFormatDescriptorHeader {
+                    color_model: Some(ColorModel::ASTC),
+                    color_primaries: Some(ColorPrimaries::BT709),
+                    transfer_function: Some(TransferFunction::SRGB),
+                    flags: DataFormatFlags::STRAIGHT_ALPHA,
+                    texel_block_dimensions: [
+                        NonZeroU8::new(12).unwrap(),
+                        NonZeroU8::new(12).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                        NonZeroU8::new(1).unwrap(),
+                    ],
+                    bytes_planes: [16, 0, 0, 0, 0, 0, 0, 0],
+                },
+                sample_information: vec![SampleInformation {
+                    bit_offset: 0,
+                    bit_length: NonZeroU8::new(128).unwrap(),
+                    channel_type: 0,
+                    channel_type_qualifiers: ChannelTypeQualifiers::empty(),
+                    sample_positions: [0, 0, 0, 0],
+                    lower: 0,
+                    upper: 4294967295,
+                }],
+            },
             _ => return None,
         })
     }
